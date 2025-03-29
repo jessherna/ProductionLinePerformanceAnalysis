@@ -15,6 +15,13 @@ This project simulates an industrial production line control system with:
 
 The system architecture demonstrates the integration of C# for control systems with Python for data analysis, connected via REST APIs and SignalR for real-time updates.
 
+## Project Components
+
+This project consists of two main components:
+
+1. **Production Line Control System**: A real-time monitoring and control system for manufacturing processes
+2. **Production Line Performance Analysis**: Data analysis and machine learning for production line optimization
+
 ## Architecture
 
 The project consists of three main components:
@@ -93,7 +100,7 @@ cd frontend
 npm install
 ```
 
-### Running the Application
+### Running the Control System
 
 For Windows users, you can use the included startup script:
 ```
@@ -122,13 +129,36 @@ npm start
 
 4. Open your browser and navigate to `http://localhost:1234`
 
-## Usage
+### Running the Performance Analysis
 
-1. Initialize the production line
-2. Start the production process
-3. Monitor the dashboard for real-time updates
-4. Test the anomaly detection by adjusting sensor values
-5. Use the emergency stop if needed
+To run the data analysis component:
+
+1. Set up the Python environment:
+```
+cd analysis
+python -m venv venv
+venv\Scripts\activate  # On Windows
+source venv/bin/activate  # On Unix/macOS
+pip install -r requirements.txt
+```
+
+2. Download and process the dataset:
+```
+python src/data/download.py
+python src/data/preprocess.py
+```
+
+3. Run the anomaly detection model:
+```
+python src/models/anomaly.py
+```
+
+4. Start the analysis web application:
+```
+python src/web/app.py
+```
+
+5. Open your browser and navigate to `http://localhost:5050`
 
 ## Troubleshooting
 
