@@ -1,195 +1,172 @@
 # Production Line Control and Analysis System
 
-A comprehensive demo showcasing a production line control system with real-time monitoring, anomaly detection, and predictive maintenance capabilities.
-
-![Production Line Control System Demo](docs/screenshot.png)
-
-## Overview
-
-This project simulates an industrial production line control system with:
-
-- Real-time hardware integration (PLC, robot, vision system)
-- Anomaly detection using machine learning (Python/scikit-learn)
-- Interactive operator HMI dashboard
-- Integration with simulated MES/ERP systems
-
-The system architecture demonstrates the integration of C# for control systems with Python for data analysis, connected via REST APIs and SignalR for real-time updates.
-
-## Project Components
-
 This project consists of two main components:
 
-1. **Production Line Control System**: A real-time monitoring and control system for manufacturing processes
-2. **Production Line Performance Analysis**: Data analysis and machine learning for production line optimization
+1. **Production Line Control System**: Real-time monitoring and control for manufacturing operations
+2. **Production Line Performance Analysis**: Historical data analysis with anomaly detection
 
-## Architecture
+## Project Overview
 
-The project consists of three main components:
+This system provides a comprehensive solution for manufacturing environments, combining:
 
-1. **Python Analysis API**: Flask-based backend that provides anomaly detection using Isolation Forest algorithm.
-2. **C# Production Line API**: .NET-based backend that simulates hardware control and production processes.
-3. **React Frontend**: Modern UI for monitoring and controlling the production line.
+- Real-time production monitoring and control
+- Historical data analysis for quality improvement
+- Anomaly detection to identify potential issues
+- Performance visualization and reporting
 
-![System Architecture](docs/architecture-diagram.png)
+## Components
 
-## Features
+### 1. Production Line Control System
 
-- 🔄 Real-time production monitoring and control
-- 🤖 Hardware simulation (PLC, robot arm, vision system)
-- 📊 Data visualization with time series charts
-- 🔍 Anomaly detection using machine learning
-- 🔔 Real-time alerts and notifications
-- 📋 Order management and tracking
-- 🚨 Emergency stop functionality
-- 📱 Responsive design for desktop and mobile
+A real-time dashboard for monitoring and controlling manufacturing operations:
 
-## Technologies Used
+- Live sensor data visualization
+- Order management and tracking
+- Production scheduling
+- Anomaly alerts
 
-- **Backend**:
-  - C# / ASP.NET Core Web API
-  - Python / Flask
-  - SignalR for real-time communication
-  - RESTful API architecture
+**Tech Stack:**
+- Frontend: React with TypeScript
+- Backend: C# (.NET 6+) with SignalR for real-time updates
+- Database: SQL Server
 
-- **Frontend**:
-  - React with TypeScript
-  - Bootstrap for UI components
-  - Recharts for data visualization
-  - Axios for API communication
+### 2. Production Line Performance Analysis
 
-- **Data Analysis**:
-  - scikit-learn for anomaly detection (Isolation Forest)
-  - pandas for data manipulation
-  - NumPy for numerical operations
+Data analysis tools focused on manufacturing performance and quality improvement:
+
+- Historical data analysis
+- Pattern recognition
+- Anomaly detection
+- Performance reporting
+
+**Tech Stack:**
+- Python 3.8+
+- Flask for web interface
+- scikit-learn for machine learning
+- Pandas for data processing
+
+## System Architecture
+
+The system follows a modular architecture with these key components:
+
+```
+├── Production Line Control (C# + React)
+│   ├── Real-time Dashboard
+│   ├── Order Management
+│   └── Alerts System
+└── Performance Analysis (Python)
+    ├── Data Processing
+    ├── Anomaly Detection
+    └── Visualization
+```
 
 ## Getting Started
 
-### Prerequisites
+### Setting up the Production Line Control System
 
-- .NET 6.0+
-- Python 3.9+
-- Node.js 14.0+
-- npm or yarn
+1. **Clone the repository**
 
-### Installation
+   ```
+   git clone https://github.com/yourusername/production-line-control.git
+   cd production-line-control
+   ```
 
-1. Clone the repository:
-```
-git clone https://github.com/yourusername/production-line-simulator.git
-cd production-line-simulator
-```
+2. **Backend setup**
 
-2. Set up the Python backend:
-```
-cd backend/python/AnalysisAPI
-python -m venv venv
-venv\Scripts\activate  # On Windows
-source venv/bin/activate  # On Unix/macOS
-pip install -r requirements.txt
-```
+   ```
+   cd backend/csharp/ProductionLineAPI
+   dotnet restore
+   dotnet run
+   ```
 
-3. Set up the C# backend:
-```
-cd backend/csharp/ProductionLineAPI
-dotnet restore
-```
+3. **Frontend setup**
 
-4. Set up the frontend:
-```
-cd frontend
-npm install
-```
+   ```
+   cd frontend
+   npm install
+   npm start
+   ```
 
-### Running the Control System
+4. **Open your browser** to `http://localhost:1234`
 
-For Windows users, you can use the included startup script:
+### Setting up the Production Line Performance Analysis
+
+1. **Set up Python environment**
+
+   ```
+   cd analysis
+   python -m venv venv
+   venv\Scripts\activate  # On Windows
+   source venv/bin/activate  # On Unix/macOS
+   pip install -r requirements.txt
+   ```
+
+2. **Download and process the dataset**
+
+   The system uses the Bosch Production Line Performance dataset from Kaggle.
+
+   ```
+   python src/data/download.py
+   python src/data/preprocess.py
+   ```
+
+   **Note about Kaggle authentication:**
+   - If you have a Kaggle account, place your `kaggle.json` credentials file in `~/.kaggle/`
+   - If you encounter authentication issues, the system will automatically create synthetic data for development
+   - The synthetic data mirrors the structure and statistical properties of the real dataset
+   - To use real data, manually download from [Kaggle](https://www.kaggle.com/c/bosch-production-line-performance/data) and place in `analysis/data/raw/`
+
+3. **Run the anomaly detection model**
+
+   ```
+   python src/models/anomaly.py
+   ```
+
+4. **Start the web application**
+
+   ```
+   python src/web/app.py
+   ```
+
+5. **Open your browser** to `http://localhost:5050`
+
+## Running the Complete System
+
+For convenience, you can start all components using the provided startup script:
+
+**Windows:**
 ```
 .\startup.bat
 ```
 
-Or run each component separately:
-
-1. Run the Python Analysis API:
+**macOS/Linux:**
 ```
-cd backend/python/AnalysisAPI
-python app.py
+./startup.sh
 ```
-
-2. Run the C# Production Line API:
-```
-cd backend/csharp/ProductionLineAPI
-dotnet run
-```
-
-3. Run the React frontend:
-```
-cd frontend
-npm start
-```
-
-4. Open your browser and navigate to `http://localhost:1234`
-
-### Running the Performance Analysis
-
-To run the data analysis component:
-
-1. Set up the Python environment:
-```
-cd analysis
-python -m venv venv
-venv\Scripts\activate  # On Windows
-source venv/bin/activate  # On Unix/macOS
-pip install -r requirements.txt
-```
-
-2. Download and process the dataset:
-```
-python src/data/download.py
-python src/data/preprocess.py
-```
-
-3. Run the anomaly detection model:
-```
-python src/models/anomaly.py
-```
-
-4. Start the analysis web application:
-```
-python src/web/app.py
-```
-
-5. Open your browser and navigate to `http://localhost:5050`
 
 ## Troubleshooting
 
-### Port Conflicts
+### Common Issues
 
-If you encounter an error like `Failed to bind to address http://127.0.0.1:5028: address already in use`, you need to:
+1. **Port conflicts:**
+   - The C# API uses port 5000
+   - The Python Analysis uses port 5050
+   - The React frontend uses port 1234
+   - If any port is already in use, modify the corresponding configuration
 
-1. Close any existing instances of the application
-2. Kill processes using the ports with:
-   ```
-   taskkill /F /IM dotnet.exe
-   taskkill /F /IM node.exe
-   ```
-3. Run the startup script again
+2. **SignalR Connection Issues:**
+   - Ensure all CORS settings are properly configured
+   - Check browser console for specific error messages
 
-### SignalR Connection Issues
+3. **Kaggle API Authentication:**
+   - If you encounter "403 Forbidden" errors with the Kaggle API:
+     - Verify your `kaggle.json` file has the correct permissions
+     - Use the synthetic data generated automatically instead
+     - The system will detect this scenario and create realistic test data
 
-If you experience SignalR connection problems:
-
-1. Check browser console for errors
-2. Verify CORS is properly configured in the backend
-3. Ensure your browser supports WebSockets
-4. Confirm all ports are accessible (5000 for Python API, 5028 for C# API, 1234 for Frontend)
-
-### React Component Errors
-
-For React errors related to type handling:
-
-1. Ensure proper type conversion for enums with `String(enumValue)`
-2. Check that API responses match the expected TypeScript interfaces
-3. Implement proper null checking for objects before accessing properties
+4. **Python Environment:**
+   - Ensure all dependencies are installed with `pip install -r requirements.txt`
+   - Python 3.8+ is required
 
 ## License
 

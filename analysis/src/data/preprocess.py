@@ -59,7 +59,14 @@ def load_data():
             logger.info("Please run the download.py script first.")
             sys.exit(1)
     
-    # Load the data
+    # Check if these are placeholder files
+    with open(RAW_DATA_DIR / "train_numeric.csv", 'r') as f:
+        first_line = f.readline().strip()
+        if first_line.startswith("# This is a placeholder"):
+            logger.info("Detected placeholder files. Generating synthetic data instead...")
+            return generate_synthetic_data()
+    
+    # Load the real data
     try:
         train_numeric = pd.read_csv(RAW_DATA_DIR / "train_numeric.csv")
         train_categorical = pd.read_csv(RAW_DATA_DIR / "train_categorical.csv")
@@ -77,6 +84,97 @@ def load_data():
     except Exception as e:
         logger.error(f"Error loading data: {e}")
         sys.exit(1)
+
+def generate_synthetic_data():
+    """Generate synthetic data for development purposes."""
+    logger.info("Generating synthetic Bosch production line data...")
+    
+    # Set random seed for reproducibility
+    np.random.seed(42)
+    
+    # Number of samples
+    n_samples = 10000
+    
+    # Create synthetic numeric data
+    numeric_features = 50
+    numeric_column_names = ["Id"] + ["L0_S0_F" + str(i) for i in range(numeric_features)] + ["Response"]
+    
+    # Generate IDs
+    ids = np.arange(n_samples)
+    
+    # Generate feature values (normally distributed)
+    features = np.random.normal(0, 1, size=(n_samples, numeric_features))
+    
+    # Generate binary response (imbalanced, about 1% failure rate)
+    responses = np.random.choice([0, 1], size=n_samples, p=[0.99, 0.01])
+    
+    # Combine into DataFrame
+    numeric_data = pd.DataFrame(
+        np.column_stack([ids, features, responses]), 
+        columns=numeric_column_names
+    )
+    
+    # Create synthetic categorical data
+    categorical_features = 20
+    categorical_column_names = ["Id"] + ["L0_S0_C" + str(i) for i in range(categorical_features)]
+    
+    # Generate categorical values (3-5 categories per feature)
+    categorical_values = []
+    for i in range(categorical_features):
+        n_categories = np.random.randint(3, 6)
+        categorical_values.append(np.random.choice([f"Cat_{j}" for j in range(n_categories)], size=n_samples))
+    
+    # Combine into DataFrame
+    categorical_data = pd.DataFrame(
+        np.column_stack([ids, np.column_stack(categorical_values)]),
+        columns=categorical_column_names
+    )
+    
+    # Create synthetic date data
+    date_features = 10
+    date_column_names = ["Id"] + ["L0_S0_D" + str(i) for i in range(date_features)]
+    
+    # Base date
+    base_date = pd.Timestamp('2023-01-01')
+    
+    # Generate date values (sequential through production line)
+    date_values = []
+    current_date = base_date
+    for i in range(date_features):
+        # Add some random time increment for each station (1-30 minutes)
+        dates = [current_date + pd.Timedelta(minutes=np.random.randint(1, 30)) * (j+1) for j in range(n_samples)]
+        date_values.append([d.strftime("%Y-%m-%d %H:%M:%S") for d in dates])
+        current_date = current_date + pd.Timedelta(minutes=30)
+    
+    # Combine into DataFrame
+    date_data = pd.DataFrame(
+        np.column_stack([ids, np.column_stack(date_values)]),
+        columns=date_column_names
+    )
+    
+    # Convert ID column to integer in all dataframes
+    numeric_data["Id"] = numeric_data["Id"].astype(int)
+    categorical_data["Id"] = categorical_data["Id"].astype(int)
+    date_data["Id"] = date_data["Id"].astype(int)
+    
+    # Convert Response column to integer
+    numeric_data["Response"] = numeric_data["Response"].astype(int)
+    
+    logger.info(f"Generated synthetic numeric data: {numeric_data.shape}")
+    logger.info(f"Generated synthetic categorical data: {categorical_data.shape}")
+    logger.info(f"Generated synthetic date data: {date_data.shape}")
+    
+    # Save the synthetic data to CSV (for reference)
+    INTERIM_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    numeric_data.to_csv(INTERIM_DATA_DIR / "synthetic_numeric.csv", index=False)
+    categorical_data.to_csv(INTERIM_DATA_DIR / "synthetic_categorical.csv", index=False)
+    date_data.to_csv(INTERIM_DATA_DIR / "synthetic_date.csv", index=False)
+    
+    return {
+        "numeric": numeric_data,
+        "categorical": categorical_data,
+        "date": date_data,
+    }
 
 def analyze_missing_values(data):
     """Analyze missing values in the dataset."""
