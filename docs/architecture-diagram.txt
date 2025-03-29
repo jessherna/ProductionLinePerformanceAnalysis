@@ -1,0 +1,19 @@
++--------------------+      REST API       +----------------------+
+|                    |<----------------->|                      |
+|    React Frontend  |                   |  C# Production Line  |
+|    (TypeScript)    |                   |  API (.NET 6+)       |
+|                    |      SignalR      |                      |
+|                    |<- - - - - - - - ->|                      |
++--------------------+                   +----------------------+
+         ^                                          |
+         |                                          |
+         | REST API                                 | REST API
+         |                                          v
++--------------------+                   +----------------------+
+|                    |                   |                      |
+|  Python Analysis   |<----------------->|   Simulated Hardware |
+|  API (Flask)       |      REST API     |   (PLC, Robot, etc.) |
+|                    |                   |                      |
++--------------------+                   +----------------------+
+
+Production Line Control and Analysis System Architecture 

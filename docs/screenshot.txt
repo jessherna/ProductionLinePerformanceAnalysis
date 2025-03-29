@@ -1,0 +1,11 @@
+This is a placeholder for the Production Line Control System Demo screenshot.
+
+In a real implementation, this would be replaced with an actual screenshot image (screenshot.png)
+showing the system's dashboard in operation with charts, control panels, and real-time data display.
+
+The screenshot would showcase:
+1. The main dashboard with production metrics
+2. Real-time sensor data visualization
+3. Anomaly detection alerts
+4. Production line status indicators
+5. Order management interface 

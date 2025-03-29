@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Production Line Control and Analysis System</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <style>
+    body {
+      padding-top: 56px;
+    }
+    .status-offline { color: #dc3545; }
+    .status-initializing { color: #ffc107; }
+    .status-ready { color: #17a2b8; }
+    .status-running { color: #28a745; }
+    .status-error { color: #dc3545; }
+    .status-maintenance { color: #6c757d; }
+    .status-emergencystop { color: #dc3545; font-weight: bold; }
+    
+    .panel {
+      background-color: white;
+      border-radius: 0.25rem;
+      box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+      margin-bottom: 1rem;
+      padding: 1rem;
+    }
+    
+    .control-panel button {
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .emergency-button {
+      background-color: #dc3545;
+      color: white;
+      font-weight: bold;
+      padding: 1rem;
+      font-size: 1.25rem;
+    }
+    
+    .io-point {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border-radius: 50%;
+      margin-right: 0.5rem;
+    }
+    
+    .io-point-true {
+      background-color: #28a745;
+    }
+    
+    .io-point-false {
+      background-color: #dc3545;
+    }
+    
+    .anomaly-alert {
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="../src/index.tsx"></script>
+</body>
+</html> 
