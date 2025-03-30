@@ -8,8 +8,9 @@ import {
   resetProduction, 
   emergencyStop 
 } from '../services/apiService';
-import { getConnection } from '../services/signalRService';
+import { getConnection, resetConnection } from '../services/signalRService';
 import { DeviceStatus, ProductionLine, ProductionStatus } from '../services/types';
+import * as signalR from '@microsoft/signalr';
 
 const getStatusClassName = (status: DeviceStatus | ProductionStatus | string): string => {
   return `status-${String(status).toLowerCase()}`;
@@ -20,6 +21,39 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signalRConnected, setSignalRConnected] = useState(false);
+
+  // Function to safely get updates via SignalR
+  const setupSignalRConnection = () => {
+    try {
+      const connection = getConnection();
+      
+      // Check if connection is already established
+      if (connection.state === signalR.HubConnectionState.Connected) {
+        setSignalRConnected(true);
+      }
+      
+      // Set up connection state handlers
+      connection.onclose(() => setSignalRConnected(false));
+      connection.onreconnecting(() => setSignalRConnected(false));
+      connection.onreconnected(() => setSignalRConnected(true));
+      
+      // Set up event handlers
+      connection.on('ReceiveProductionUpdate', (data: ProductionLine) => {
+        setProductionLine(data);
+      });
+
+      connection.on('ReceiveStatusChange', (oldStatus: string, newStatus: string) => {
+        console.log(`Production status changed from ${oldStatus} to ${newStatus}`);
+      });
+
+      return connection;
+    } catch (err) {
+      console.error('Error setting up SignalR connection:', err);
+      setError('Failed to connect to real-time updates. Refresh the page to try again.');
+      return null;
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,70 +68,235 @@ const Dashboard: React.FC = () => {
     };
 
     fetchData();
-
-    const connection = getConnection();
-    connection.on('ReceiveProductionUpdate', (data: ProductionLine) => {
-      setProductionLine(data);
-    });
-
-    connection.on('ReceiveStatusChange', (oldStatus: string, newStatus: string) => {
-      console.log(`Production status changed from ${oldStatus} to ${newStatus}`);
-    });
-
+    
+    // Set up SignalR
+    const connection = setupSignalRConnection();
+    
+    // Cleanup function
     return () => {
-      connection.off('ReceiveProductionUpdate');
-      connection.off('ReceiveStatusChange');
+      if (connection) {
+        connection.off('ReceiveProductionUpdate');
+        connection.off('ReceiveStatusChange');
+      }
     };
   }, []);
+  
+  // Function to handle reconnection
+  const handleReconnect = async () => {
+    setError(null);
+    try {
+      console.log('Dashboard reconnect button clicked');
+      
+      // Display temporary connecting message
+      setError('Reconnecting to server...');
+      
+      // Force reset the connection
+      const conn = await resetConnection();
+      console.log('Connection reset complete in Dashboard', conn);
+      
+      if (conn.state === signalR.HubConnectionState.Connected) {
+        console.log('Connection successfully established');
+        setSignalRConnected(true);
+        setError(null);
+        
+        // Re-setup the event handlers
+        conn.on('ReceiveProductionUpdate', (data: ProductionLine) => {
+          setProductionLine(data);
+        });
+
+        conn.on('ReceiveStatusChange', (oldStatus: string, newStatus: string) => {
+          console.log(`Production status changed from ${oldStatus} to ${newStatus}`);
+        });
+        
+        // Refresh production data after reconnection
+        const data = await getProductionStatus();
+        setProductionLine(data);
+      } else {
+        setError('Connection is not in connected state. Try refreshing the page.');
+        setSignalRConnected(false);
+      }
+    } catch (err) {
+      console.error('Error during reconnection in Dashboard:', err);
+      setError('Failed to reconnect. Please refresh the page to try again.');
+    }
+  };
 
   const handleInitialize = async () => {
     try {
       setInitializing(true);
+      
+      // Show loading state on the button
+      const initBtn = document.querySelector('.btn-primary') as HTMLButtonElement;
+      if (initBtn) {
+        initBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Initializing...';
+      }
+      
+      // Wait for the backend to initialize
       await initializeProductionLine();
+      
+      // Fetch updated state after initialization
+      const data = await getProductionStatus();
+      setProductionLine(data);
+      
       setInitializing(false);
-    } catch (err) {
-      setError('Failed to initialize production line');
+    } catch (err: any) {
+      console.error('Initialization error:', err);
+      setError(err.message || 'Failed to initialize production line. Please check connection and try again.');
       setInitializing(false);
+      
+      // Reset the button state
+      const initBtn = document.querySelector('.btn-primary') as HTMLButtonElement;
+      if (initBtn) {
+        initBtn.innerHTML = 'Initialize Production Line';
+      }
     }
   };
 
   const handleStart = async () => {
     try {
+      // Show loading state on the button
+      const startBtn = document.querySelector('.btn-primary') as HTMLButtonElement;
+      if (startBtn) {
+        startBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+        startBtn.disabled = true;
+      }
+      
       await startProduction();
-    } catch (err) {
-      setError('Failed to start production');
+      
+      // Success - production should be started
+      // The UI will be updated via SignalR when the status changes
+    } catch (err: any) {
+      // Show error message
+      setError(err.message || 'Failed to start production. Please check connection.');
+      
+      // Reset the button state after a short delay
+      setTimeout(() => {
+        const startBtn = document.querySelector('.btn-primary') as HTMLButtonElement;
+        if (startBtn) {
+          startBtn.innerHTML = '<i class="bi bi-play-fill"></i> Start';
+          startBtn.disabled = false;
+        }
+      }, 1000);
     }
   };
 
   const handleStop = async () => {
     try {
+      // Show loading state on the button
+      const stopBtn = document.querySelector('.btn-secondary') as HTMLButtonElement;
+      if (stopBtn) {
+        stopBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Stopping...';
+        stopBtn.disabled = true;
+      }
+      
       await stopProduction();
-    } catch (err) {
-      setError('Failed to stop production');
+      
+      // Success - production should be stopped
+      // The UI will be updated via SignalR when the status changes
+    } catch (err: any) {
+      // Show error message
+      setError(err.message || 'Failed to stop production. Please try again or use emergency stop.');
+      
+      // Reset the button state after a short delay
+      setTimeout(() => {
+        const stopBtn = document.querySelector('.btn-secondary') as HTMLButtonElement;
+        if (stopBtn) {
+          stopBtn.innerHTML = '<i class="bi bi-stop-fill"></i> Stop';
+          stopBtn.disabled = false;
+        }
+      }, 1000);
     }
   };
 
   const handlePause = async () => {
     try {
+      // Show loading state on the button
+      const pauseBtn = document.querySelector('.btn-warning') as HTMLButtonElement;
+      if (pauseBtn) {
+        pauseBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Pausing...';
+        pauseBtn.disabled = true;
+      }
+      
       await pauseProduction();
-    } catch (err) {
-      setError('Failed to pause production');
+      
+      // Success - production should be paused
+      // The UI will be updated via SignalR when the status changes
+    } catch (err: any) {
+      // Show error message
+      setError(err.message || 'Failed to pause production. Please try again.');
+      
+      // Reset the button state after a short delay
+      setTimeout(() => {
+        const pauseBtn = document.querySelector('.btn-warning') as HTMLButtonElement;
+        if (pauseBtn) {
+          pauseBtn.innerHTML = '<i class="bi bi-pause-fill"></i> Pause';
+          pauseBtn.disabled = false;
+        }
+      }, 1000);
     }
   };
 
   const handleReset = async () => {
     try {
+      // Show loading state on the button
+      const resetBtn = document.querySelector('.btn-info') as HTMLButtonElement;
+      if (resetBtn) {
+        resetBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Resetting...';
+        resetBtn.disabled = true;
+      }
+      
       await resetProduction();
-    } catch (err) {
-      setError('Failed to reset production line');
+      
+      // Success - production should be reset
+      // The UI will be updated via SignalR when the status changes
+    } catch (err: any) {
+      // Show error message
+      setError(err.message || 'Failed to reset production line. Please try again.');
+      
+      // Reset the button state after a short delay
+      setTimeout(() => {
+        const resetBtn = document.querySelector('.btn-info') as HTMLButtonElement;
+        if (resetBtn) {
+          resetBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Reset';
+          resetBtn.disabled = false;
+        }
+      }, 1000);
     }
   };
 
   const handleEmergencyStop = async () => {
     try {
+      // Show loading state on the button
+      const emergencyBtn = document.querySelector('.emergency-button') as HTMLButtonElement;
+      if (emergencyBtn) {
+        emergencyBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> STOPPING...';
+        emergencyBtn.disabled = true;
+      }
+      
       await emergencyStop();
-    } catch (err) {
-      setError('Failed to activate emergency stop');
+      
+      // Reset all buttons after emergency stop
+      setTimeout(() => {
+        // Reset all button states
+        const emergencyBtn = document.querySelector('.emergency-button') as HTMLButtonElement;
+        if (emergencyBtn) {
+          emergencyBtn.innerHTML = '<i class="bi bi-exclamation-octagon-fill"></i> EMERGENCY STOP';
+          emergencyBtn.disabled = false;
+        }
+      }, 1500);
+      
+    } catch (err: any) {
+      // Show error message - for emergency stop, this is more critical
+      setError(err.message || 'CRITICAL ERROR: Failed to activate emergency stop! Please check hardware and connections.');
+      
+      // Reset the button state after a short delay
+      setTimeout(() => {
+        const emergencyBtn = document.querySelector('.emergency-button') as HTMLButtonElement;
+        if (emergencyBtn) {
+          emergencyBtn.innerHTML = '<i class="bi bi-exclamation-octagon-fill"></i> EMERGENCY STOP';
+          emergencyBtn.disabled = false;
+        }
+      }, 1000);
     }
   };
 
@@ -138,6 +337,19 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {!signalRConnected && !error && (
+        <div className="alert alert-warning alert-dismissible fade show" role="alert">
+          <strong>Real-time updates disconnected.</strong> You may not see the latest production data.
+          <button className="btn btn-sm btn-outline-dark ms-3" onClick={handleReconnect}>
+            <i className="bi bi-arrow-clockwise me-1"></i>
+            Reconnect
+          </button>
+          <span className="ms-2 small text-muted">
+            (Try refreshing the page if reconnection fails)
+          </span>
+        </div>
+      )}
+
       <div className="row mb-3">
         <div className="col-md-12">
           <div className="panel">
@@ -146,6 +358,11 @@ const Dashboard: React.FC = () => {
               <span className={`ms-2 ${getStatusClassName(productionLine.status as unknown as DeviceStatus)}`}>
                 {productionLine.status}
               </span>
+              {signalRConnected && (
+                <small className="ms-3 text-success">
+                  <i className="bi bi-wifi"></i> Live updates
+                </small>
+              )}
             </h3>
             <div className="control-panel mt-3">
               <button 

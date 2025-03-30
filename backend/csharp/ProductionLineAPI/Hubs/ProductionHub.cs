@@ -15,6 +15,7 @@ namespace ProductionLineAPI.Hubs
         public override async Task OnConnectedAsync()
         {
             _logger.LogInformation($"Client connected: {Context.ConnectionId}");
+            await Clients.Caller.SendAsync("ConnectionEstablished", new { message = "Connected to ProductionHub", connectionId = Context.ConnectionId });
             await base.OnConnectedAsync();
         }
 
@@ -46,6 +47,13 @@ namespace ProductionLineAPI.Hubs
         {
             _logger.LogInformation($"Sending error alert: {errorMessage}");
             await Clients.All.SendAsync("ReceiveErrorAlert", errorMessage);
+        }
+
+        // Simple ping method for connection testing
+        public async Task Ping()
+        {
+            _logger.LogInformation($"Ping received from client: {Context.ConnectionId}");
+            await Clients.Caller.SendAsync("Pong", new { timestamp = DateTime.UtcNow, message = "Pong from server" });
         }
     }
 } 

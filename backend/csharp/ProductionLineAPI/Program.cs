@@ -15,19 +15,22 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", builder =>
     {
         builder
+            .WithOrigins("http://localhost:1234", "http://127.0.0.1:1234") // Explicitly allow frontend origin
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .SetIsOriginAllowed(_ => true) // Allow any origin
-            .AllowCredentials(); // Needed for SignalR
+            .AllowCredentials() // Required for SignalR
+            .SetIsOriginAllowed(_ => true); // Allow any origin as fallback
     });
 });
 
-// Add SignalR
+// Add SignalR with improved settings
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
     options.KeepAliveInterval = TimeSpan.FromSeconds(10);
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.MaximumReceiveMessageSize = 102400; // 100 KB
+    options.StreamBufferCapacity = 20; // Default is 10
 });
 
 // Register services

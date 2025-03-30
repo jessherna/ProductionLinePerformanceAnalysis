@@ -90,5 +90,123 @@ namespace ProductionLineAPI.Controllers
                 return StatusCode(500, "An error occurred while predicting anomaly");
             }
         }
+        
+        // Advanced Analysis Endpoints
+        
+        [HttpGet("status")]
+        public async Task<ActionResult<AnalysisApiStatus>> GetAnalysisStatus()
+        {
+            try
+            {
+                var status = await _pythonAnalysisService.GetApiStatusAsync();
+                return Ok(status);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting analysis API status");
+                return StatusCode(500, "An error occurred while retrieving analysis API status");
+            }
+        }
+        
+        [HttpPost("advanced-predict")]
+        public async Task<ActionResult<AdvancedAnomalyResult>> PerformAdvancedAnalysis([FromBody] AdvancedAnalysisRequest request)
+        {
+            try
+            {
+                var result = await _pythonAnalysisService.PerformAdvancedAnalysisAsync(request.Data, request.ModelName);
+                
+                // If it's an anomaly, send an enhanced alert via SignalR
+                if (result.IsAnomaly)
+                {
+                    await _hubContext.Clients.All.SendAsync("ReceiveAdvancedAnomalyAlert", result, request.Data);
+                }
+                
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error performing advanced analysis");
+                return StatusCode(500, "An error occurred while performing advanced analysis");
+            }
+        }
+        
+        [HttpGet("models")]
+        public async Task<ActionResult<ModelList>> GetAvailableModels()
+        {
+            try
+            {
+                var models = await _pythonAnalysisService.GetAvailableModelsAsync();
+                return Ok(models);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting available models");
+                return StatusCode(500, "An error occurred while retrieving available models");
+            }
+        }
+        
+        [HttpGet("results")]
+        public async Task<ActionResult<AnalysisResults>> GetAnalysisResults([FromQuery] string modelType = "isolation_forest")
+        {
+            try
+            {
+                var results = await _pythonAnalysisService.GetAnalysisResultsAsync(modelType);
+                return Ok(results);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting analysis results");
+                return StatusCode(500, "An error occurred while retrieving analysis results");
+            }
+        }
+        
+        [HttpGet("plots")]
+        public async Task<ActionResult<PlotList>> GetAvailablePlots()
+        {
+            try
+            {
+                var plots = await _pythonAnalysisService.GetAvailablePlotsAsync();
+                return Ok(plots);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting available plots");
+                return StatusCode(500, "An error occurred while retrieving available plots");
+            }
+        }
+        
+        [HttpGet("plot/{plotName}")]
+        public async Task<ActionResult> GetPlotImage(string plotName)
+        {
+            try
+            {
+                var imageData = await _pythonAnalysisService.GetPlotImageAsync(plotName);
+                
+                if (imageData.Length == 0)
+                {
+                    return NotFound($"Plot '{plotName}' not found");
+                }
+                
+                // Determine content type
+                string contentType = "image/png";
+                if (plotName.EndsWith(".jpg") || plotName.EndsWith(".jpeg"))
+                {
+                    contentType = "image/jpeg";
+                }
+                
+                return File(imageData, contentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting plot image");
+                return StatusCode(500, "An error occurred while retrieving plot image");
+            }
+        }
+    }
+    
+    public class AdvancedAnalysisRequest
+    {
+        public ProductionData Data { get; set; } = new ProductionData();
+        public string? ModelName { get; set; }
     }
 } 

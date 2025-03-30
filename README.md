@@ -146,6 +146,22 @@ For convenience, you can start all components using the provided startup script:
 
 ## Troubleshooting
 
+If you encounter issues while running the system:
+
+### SignalR Connection Issues
+
+We've improved connection handling for SignalR:
+- Added ping/pong functionality to test connectivity
+- Implemented robust connection retry with exponential backoff
+- Improved CORS configuration for WebSocket connections
+
+For detailed troubleshooting steps, see [our troubleshooting guide](docs/troubleshooting.md).
+
+Quick test:
+1. Open your browser's developer console (F12)
+2. Type `window.pingSignalRServer()`
+3. You should see a "Received pong from server" message if connected
+
 ### Common Issues
 
 1. **Port conflicts:**
@@ -154,11 +170,7 @@ For convenience, you can start all components using the provided startup script:
    - The React frontend uses port 1234
    - If any port is already in use, modify the corresponding configuration
 
-2. **SignalR Connection Issues:**
-   - Ensure all CORS settings are properly configured
-   - Check browser console for specific error messages
-
-3. **Kaggle API Authentication:**
+2. **Kaggle API Authentication:**
    - If you encounter "403 Forbidden" errors with the Kaggle API:
      - Verify your `kaggle.json` file has the correct permissions
      - Use the synthetic data generated automatically instead

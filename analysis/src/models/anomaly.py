@@ -295,17 +295,82 @@ def visualize_anomalies(X, anomalies, scores, method_name):
     plt.close()
 
 def save_model(model, method_name):
-    """Save the trained anomaly detection model."""
+    """Save the trained model to disk."""
     logger.info(f"Saving {method_name} model...")
+    model_path = MODELS_DIR / f"anomaly_detection_{method_name.lower().replace(' ', '_')}.pkl"
+    with open(model_path, "wb") as f:
+        pickle.dump(model, f)
+    logger.info(f"Model saved to {model_path}")
+    return model_path
+
+def load_model(method_name):
+    """Load a trained model from disk."""
+    logger.info(f"Loading {method_name} model...")
+    model_path = MODELS_DIR / f"anomaly_detection_{method_name.lower().replace(' ', '_')}.pkl"
     
-    model_file = MODELS_DIR / f"anomaly_detection_{method_name.lower().replace(' ', '_')}.pkl"
+    if not model_path.exists():
+        logger.error(f"Model file not found: {model_path}")
+        return None
+        
+    try:
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
+        logger.info(f"Model loaded from {model_path}")
+        return model
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        return None
+
+def predict_anomaly(model, X, method_name="Isolation Forest"):
+    """Predict anomalies on new data using a trained model."""
+    logger.info(f"Predicting anomalies using {method_name}...")
+    
+    if model is None:
+        logger.error("No model provided for prediction")
+        return None, None
     
     try:
-        with open(model_file, 'wb') as f:
-            pickle.dump(model, f)
-        logger.info(f"Model saved to {model_file}")
+        # Different models have different prediction methods/attributes
+        if method_name.lower() == "isolation forest":
+            # Prediction: -1 for anomalies, 1 for normal
+            y_pred = model.predict(X)
+            # Convert to binary format (1 for anomaly, 0 for normal)
+            anomalies = np.where(y_pred == -1, 1, 0)
+            # Get anomaly scores
+            scores = -model.score_samples(X)
+            
+        elif method_name.lower() == "one-class svm":
+            # Prediction: -1 for anomalies, 1 for normal
+            y_pred = model.predict(X)
+            # Convert to binary format
+            anomalies = np.where(y_pred == -1, 1, 0)
+            # Get anomaly scores
+            scores = -model.decision_function(X)
+            
+        elif method_name.lower() == "elliptic envelope":
+            # Prediction: -1 for anomalies, 1 for normal
+            y_pred = model.predict(X)
+            # Convert to binary format
+            anomalies = np.where(y_pred == -1, 1, 0)
+            # Get anomaly scores
+            scores = -model.decision_function(X)
+            
+        elif method_name.lower() == "local outlier factor":
+            # LOF doesn't support predict() on new data in scikit-learn
+            # We'd need to retrain the model with the new data included
+            logger.warning("LocalOutlierFactor doesn't support prediction on new data")
+            return None, None
+        
+        else:
+            logger.error(f"Unknown model type: {method_name}")
+            return None, None
+        
+        logger.info(f"Prediction complete. Identified {sum(anomalies)} anomalies out of {len(X)} samples")
+        return anomalies, scores
+        
     except Exception as e:
-        logger.error(f"Error saving model: {e}")
+        logger.error(f"Error during prediction: {e}")
+        return None, None
 
 def save_results(anomalies, scores, evaluation, method_name):
     """Save the anomaly detection results."""

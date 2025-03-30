@@ -1,42 +1,56 @@
 @echo off
-echo Production Line Control and Analysis System
-echo ==========================================
-echo Stopping any existing services...
+echo.
+echo Starting Production Line Control and Analysis System...
+echo.
 
-REM Kill any existing processes that might be using the ports
-taskkill /F /FI "WINDOWTITLE eq *python*" > nul 2>&1
-taskkill /F /FI "WINDOWTITLE eq *dotnet*" > nul 2>&1
-taskkill /F /FI "WINDOWTITLE eq *npm*" > nul 2>&1
-taskkill /F /IM dotnet.exe > nul 2>&1
-taskkill /F /IM node.exe > nul 2>&1
+rem Check if the Python environment exists and is activated
+if not exist "venv\Scripts\activate.bat" (
+    echo Creating Python virtual environment...
+    python -m venv venv
+)
 
+echo Activating Python environment...
+call venv\Scripts\activate.bat
+
+echo Checking dependencies...
+pip install -r analysis/requirements.txt
+pip install -r backend/python/AnalysisAPI/requirements.txt
+
+echo.
 echo Starting services...
+echo.
 
-REM Start Python API first
-start cmd /k "cd backend\python\AnalysisAPI && python app.py"
-echo Python Analysis API started on port 5000
-timeout /t 5
+echo 1. Starting Python Analysis API with Advanced Analysis...
+start "Python Analysis API" cmd /c "title Python Analysis API && cd backend\python\AnalysisAPI && python app.py"
 
-REM Start .NET API next
-start cmd /k "cd backend\csharp\ProductionLineAPI && dotnet run"
-echo .NET Production Line API started on port 5028
-timeout /t 5
+timeout /t 5 /nobreak > nul
 
-REM Start frontend last
-start cmd /k "cd frontend && npm start"
-echo Frontend started on port 1234
+echo 2. Starting C# Production Line API...
+start "Production Line API" cmd /c "title Production Line API && cd backend\csharp\ProductionLineAPI && dotnet run"
 
+timeout /t 5 /nobreak > nul
+
+echo 3. Starting React Frontend...
+start "React Frontend" cmd /c "title React Frontend && cd frontend && npm start"
+
+echo.
 echo All services started!
 echo.
-echo Please open your browser to http://localhost:1234
+echo Open your browser to http://localhost:1234 to access the application.
 echo.
 echo Press any key to stop all services...
 pause > nul
 
-echo Stopping services...
-taskkill /F /FI "WINDOWTITLE eq *python*" > nul 2>&1
-taskkill /F /FI "WINDOWTITLE eq *dotnet*" > nul 2>&1
-taskkill /F /FI "WINDOWTITLE eq *npm*" > nul 2>&1
-taskkill /F /IM dotnet.exe > nul 2>&1
-taskkill /F /IM node.exe > nul 2>&1
-echo Done! 
+echo.
+echo Stopping all services...
+echo.
+
+taskkill /FI "WINDOWTITLE eq Python Analysis API" /T /F
+taskkill /FI "WINDOWTITLE eq Production Line API" /T /F
+taskkill /FI "WINDOWTITLE eq React Frontend" /T /F
+
+echo.
+echo All services stopped.
+echo.
+
+exit /b 0 
