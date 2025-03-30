@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using ProductionLineAPI.Models;
+using System.Text.Json;
 
 namespace ProductionLineAPI.Hubs
 {
@@ -15,6 +16,8 @@ namespace ProductionLineAPI.Hubs
         public override async Task OnConnectedAsync()
         {
             _logger.LogInformation($"Client connected: {Context.ConnectionId}");
+            _logger.LogInformation($"Connection context: User={Context.User?.Identity?.Name}, Headers={JsonSerializer.Serialize(Context.GetHttpContext()?.Request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString()))}");
+            
             await Clients.Caller.SendAsync("ConnectionEstablished", new { message = "Connected to ProductionHub", connectionId = Context.ConnectionId });
             await base.OnConnectedAsync();
         }

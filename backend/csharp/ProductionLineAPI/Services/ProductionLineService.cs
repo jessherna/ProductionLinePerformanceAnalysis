@@ -1,23 +1,28 @@
 using ProductionLineAPI.Models;
+using Microsoft.AspNetCore.SignalR;
 
 namespace ProductionLineAPI.Services
 {
-    public class ProductionLineService : IProductionLineService
+    public class ProductionLineService : IProductionLineService, IDisposable
     {
         private readonly IPythonAnalysisService _pythonAnalysisService;
         private readonly ILogger<ProductionLineService> _logger;
         private readonly Random _random = new Random();
         private Timer? _updateTimer;
+        private Timer? _keepAliveTimer;
         private ProductionLine _productionLine = new ProductionLine();
         private List<OrderDetails> _orders = new List<OrderDetails>();
         private bool _isInitialized = false;
+        private readonly IHubContext<Hubs.ProductionHub>? _hubContext;
 
         public ProductionLineService(
             IPythonAnalysisService pythonAnalysisService,
-            ILogger<ProductionLineService> logger)
+            ILogger<ProductionLineService> logger,
+            IHubContext<Hubs.ProductionHub>? hubContext = null)
         {
             _pythonAnalysisService = pythonAnalysisService;
             _logger = logger;
+            _hubContext = hubContext;
             
             // Create some dummy orders
             _orders = new List<OrderDetails>
@@ -50,6 +55,33 @@ namespace ProductionLineAPI.Services
                     Status = "Pending"
                 }
             };
+            
+            // Start a keep-alive timer to send updates periodically
+            // This ensures clients stay in sync even when idle
+            _keepAliveTimer = new Timer(BroadcastStatusCallback, null, 5000, 5000);
+        }
+
+        // Callback to broadcast current status to all clients
+        private async void BroadcastStatusCallback(object? state)
+        {
+            try
+            {
+                if (_hubContext != null)
+                {
+                    // Update sensor data occasionally
+                    if (_isInitialized && _random.Next(3) == 0)
+                    {
+                        await UpdateSensorDataAsync();
+                    }
+                    
+                    _productionLine.LastUpdated = DateTime.Now;
+                    await _hubContext.Clients.All.SendAsync("ReceiveProductionUpdate", _productionLine);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting status");
+            }
         }
 
         public async Task InitializeAsync()
@@ -258,6 +290,9 @@ namespace ProductionLineAPI.Services
 
             try
             {
+                // Store old status for comparison
+                var oldStatus = _productionLine.Status;
+                
                 // Update sensor data
                 await UpdateSensorDataAsync();
 
@@ -342,6 +377,24 @@ namespace ProductionLineAPI.Services
                         _updateTimer = null;
                     }
                 }
+                
+                // Send updates to all connected clients
+                if (_hubContext != null)
+                {
+                    await _hubContext.Clients.All.SendAsync("ReceiveProductionUpdate", _productionLine);
+                    
+                    // If status changed, send a status change notification
+                    if (oldStatus != _productionLine.Status)
+                    {
+                        await _hubContext.Clients.All.SendAsync("ReceiveStatusChange", oldStatus.ToString(), _productionLine.Status.ToString());
+                    }
+                    
+                    // If there was an anomaly, send an anomaly alert
+                    if (anomalyResult.IsAnomaly)
+                    {
+                        await _hubContext.Clients.All.SendAsync("ReceiveAnomalyAlert", anomalyResult, _productionLine.CurrentSensorData);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -362,6 +415,14 @@ namespace ProductionLineAPI.Services
             };
 
             return reasons[_random.Next(reasons.Length)];
+        }
+
+        // Implement IDisposable to clean up resources
+        public void Dispose()
+        {
+            // Clean up timers
+            _updateTimer?.Dispose();
+            _keepAliveTimer?.Dispose();
         }
     }
 } 

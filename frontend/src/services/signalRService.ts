@@ -5,10 +5,20 @@ let startPromise: Promise<void> | null = null;
 let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 5;
 
+// The URL of the SignalR hub
+const HUB_URL = 'http://localhost:5028/hubs/production';
+
 export const connectSignalR = () => {
   // If we already have a connection, return it
   if (connection) {
     console.log(`Reusing existing SignalR connection (${connection.connectionId || 'no ID yet'})`);
+    
+    // If the connection is disconnected, try to reconnect
+    if (connection.state === signalR.HubConnectionState.Disconnected) {
+      console.log('Connection is disconnected, attempting to start it');
+      startConnection().catch(err => console.error('Error restarting connection:', err));
+    }
+    
     return connection;
   }
 
@@ -16,32 +26,21 @@ export const connectSignalR = () => {
   
   // Create a new connection with improved configuration
   connection = new signalR.HubConnectionBuilder()
-    .withUrl('http://localhost:5028/hubs/production', {
-      // Remove skipNegotiation - this is often a source of connection issues
-      transport: signalR.HttpTransportType.WebSockets
+    .withUrl(HUB_URL, {
+      skipNegotiation: false,
+      transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling // Try WebSockets first, fall back to long polling
     })
     .withAutomaticReconnect([0, 1000, 2000, 5000, 10000, 15000, 30000]) // More gradual reconnect attempts
-    .configureLogging(signalR.LogLevel.Information) // Set to Information instead of Debug to reduce noise
+    .configureLogging(signalR.LogLevel.Warning) // Increase logging level for better diagnostics
     .build();
-
-  // Keep track of registered event handlers to avoid duplicates
-  const registeredHandlers = new Set();
-  
-  // Helper function to register handlers only once
-  const registerHandler = (eventName, callback) => {
-    if (!registeredHandlers.has(eventName)) {
-      connection.on(eventName, callback);
-      registeredHandlers.add(eventName);
-      console.log(`Registered handler for "${eventName}" event`);
-    }
-  };
 
   // Add connection lifecycle event handlers
   connection.onclose((error) => {
     console.log('SignalR Connection closed', error);
-    // Reset the connection on full close to allow for a clean restart
-    connection = null;
-    startPromise = null;
+    // Don't reset connection on close - let automatic reconnect try to reconnect
+    if (error) {
+      console.error('SignalR connection closed with error:', error);
+    }
   });
 
   connection.onreconnecting((error) => {
@@ -54,31 +53,6 @@ export const connectSignalR = () => {
     connectionAttempts = 0;
   });
   
-  // Register event handlers for application events
-  registerHandler('Pong', (response) => {
-    console.log('Received pong from server:', response);
-  });
-  
-  registerHandler('ConnectionEstablished', (data) => {
-    console.log('Connection established with server:', data);
-  });
-  
-  registerHandler('ReceiveProductionUpdate', (data) => {
-    console.log('Production update received:', data);
-  });
-  
-  registerHandler('ReceiveStatusChange', (status) => {
-    console.log('Status change received:', status);
-  });
-  
-  registerHandler('ReceiveAnomalyAlert', (alert) => {
-    console.log('Anomaly alert received:', alert);
-  });
-  
-  registerHandler('ReceiveErrorAlert', (error) => {
-    console.log('Error alert received:', error);
-  });
-
   // Start the connection
   startConnection();
 
@@ -99,8 +73,22 @@ export const startConnection = async (): Promise<void> => {
     return;
   }
   
+  // If we're already trying to start the connection, wait for that promise
+  if (startPromise) {
+    try {
+      await startPromise;
+      return;
+    } catch (err) {
+      console.error('Error waiting for existing start promise:', err);
+      // Continue with a new connection attempt
+    }
+  }
+  
   try {
-    await connection.start();
+    // Create a new start promise
+    startPromise = connection.start();
+    await startPromise;
+    
     console.log('SignalR Connected!');
     connectionAttempts = 0; // Reset connection attempts on successful connection
     
@@ -115,15 +103,20 @@ export const startConnection = async (): Promise<void> => {
       const delay = Math.min(1000 * (2 ** connectionAttempts), 30000); // Exponential backoff with 30s cap
       console.log(`Connection attempt ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS}, retrying in ${delay}ms...`);
       
-      // Clear any existing connection before retrying
-      if (connection) {
-        await connection.stop().catch(err => console.error("Error stopping connection during retry", err));
-      }
-      
-      setTimeout(() => startConnection(), delay);
+      // Don't stop the connection before retrying - just wait and try again
+      setTimeout(() => {
+        startPromise = null; // Clear the start promise
+        startConnection();
+      }, delay);
     } else {
       console.error(`Failed to connect after ${MAX_CONNECTION_ATTEMPTS} attempts.`);
       resetConnection(); // Try a full reset after max attempts
+    }
+  } finally {
+    // Clear the start promise if it was completed or rejected
+    if (startPromise) {
+      startPromise.catch(() => {}); // Handle any unhandled rejection
+      startPromise = null;
     }
   }
 };
@@ -156,7 +149,9 @@ export const getConnection = () => {
       console.log('Connection is currently disconnecting, will restart when done');
       connection.onclose(() => {
         console.log('Connection finished disconnecting, restarting');
-        resetConnection();
+        connection = null;
+        startPromise = null;
+        connectSignalR();
       });
       return connection;
       

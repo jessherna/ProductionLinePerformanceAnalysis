@@ -1,5 +1,6 @@
 using ProductionLineAPI.Hubs;
 using ProductionLineAPI.Services;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,11 +16,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", builder =>
     {
         builder
-            .WithOrigins("http://localhost:1234", "http://127.0.0.1:1234") // Explicitly allow frontend origin
+            .SetIsOriginAllowed(_ => true) // Allow any origin
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials() // Required for SignalR
-            .SetIsOriginAllowed(_ => true); // Allow any origin as fallback
+            .AllowCredentials(); // Required for SignalR
     });
 });
 
@@ -36,7 +36,13 @@ builder.Services.AddSignalR(options =>
 // Register services
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IPythonAnalysisService, PythonAnalysisService>();
-builder.Services.AddSingleton<IProductionLineService, ProductionLineService>();
+builder.Services.AddSingleton<IProductionLineService, ProductionLineService>(sp => 
+{
+    var pythonService = sp.GetRequiredService<IPythonAnalysisService>();
+    var logger = sp.GetRequiredService<ILogger<ProductionLineService>>();
+    var hubContext = sp.GetRequiredService<IHubContext<ProductionHub>>();
+    return new ProductionLineService(pythonService, logger, hubContext);
+});
 
 // Configure Python API URL
 builder.Services.Configure<PythonApiSettings>(builder.Configuration.GetSection("PythonApiSettings"));

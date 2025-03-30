@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   getProductionStatus, 
   initializeProductionLine, 
@@ -8,9 +8,18 @@ import {
   resetProduction, 
   emergencyStop 
 } from '../services/apiService';
-import { getConnection, resetConnection } from '../services/signalRService';
+import { connectSignalR, getConnection, resetConnection } from '../services/signalRService';
 import { DeviceStatus, ProductionLine, ProductionStatus } from '../services/types';
 import * as signalR from '@microsoft/signalr';
+
+interface ProductionStage {
+  id: string;
+  name: string;
+  status: 'idle' | 'active' | 'completed' | 'error';
+  progress: number; // 0-100
+  timeRemaining?: number; // seconds
+  description: string;
+}
 
 const getStatusClassName = (status: DeviceStatus | ProductionStatus | string): string => {
   return `status-${String(status).toLowerCase()}`;
@@ -22,29 +31,131 @@ const Dashboard: React.FC = () => {
   const [initializing, setInitializing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signalRConnected, setSignalRConnected] = useState(false);
+  const [productionStages, setProductionStages] = useState<ProductionStage[]>([
+    { 
+      id: 'stamping', 
+      name: 'Body Stamping', 
+      status: 'idle', 
+      progress: 0, 
+      description: 'Stamping metal sheets into body panels'
+    },
+    { 
+      id: 'welding', 
+      name: 'Body Welding', 
+      status: 'idle', 
+      progress: 0, 
+      description: 'Joining body panels with robotic welding'
+    },
+    { 
+      id: 'painting', 
+      name: 'Paint Shop', 
+      status: 'idle', 
+      progress: 0, 
+      description: 'Applying base coat, color, and clear coat'
+    },
+    { 
+      id: 'assembly', 
+      name: 'Final Assembly', 
+      status: 'idle', 
+      progress: 0, 
+      description: 'Installing components and finishing'
+    },
+    { 
+      id: 'testing', 
+      name: 'Quality Testing', 
+      status: 'idle', 
+      progress: 0, 
+      description: 'Final inspection and testing'
+    }
+  ]);
 
   // Function to safely get updates via SignalR
-  const setupSignalRConnection = () => {
+  const setupSignalRConnection = useCallback(() => {
     try {
-      const connection = getConnection();
+      const connection = connectSignalR(); // Use connectSignalR instead of getConnection to ensure a fresh connection
       
       // Check if connection is already established
       if (connection.state === signalR.HubConnectionState.Connected) {
+        console.log('SignalR already connected:', connection.connectionId);
         setSignalRConnected(true);
+      } else {
+        console.log('SignalR connecting...', connection.state);
       }
       
       // Set up connection state handlers
-      connection.onclose(() => setSignalRConnected(false));
-      connection.onreconnecting(() => setSignalRConnected(false));
-      connection.onreconnected(() => setSignalRConnected(true));
+      connection.onclose(() => {
+        console.log('SignalR connection closed');
+        setSignalRConnected(false);
+      });
+      
+      connection.onreconnecting(() => {
+        console.log('SignalR reconnecting...');
+        setSignalRConnected(false);
+      });
+      
+      connection.onreconnected(() => {
+        console.log('SignalR reconnected!');
+        setSignalRConnected(true);
+      });
       
       // Set up event handlers
       connection.on('ReceiveProductionUpdate', (data: ProductionLine) => {
+        console.log('Production update received via SignalR:', data);
         setProductionLine(data);
+        
+        // Update production stages based on the status
+        if (data.status === ProductionStatus.Running) {
+          // If we're running but all stages are idle, activate the first one
+          setProductionStages(prevStages => {
+            // If no active stages and production is running, activate the first stage
+            if (!prevStages.some(s => s.status === 'active' || s.status === 'completed')) {
+              const newStages = [...prevStages];
+              newStages[0].status = 'active';
+              return newStages;
+            }
+            return prevStages;
+          });
+        } else if (data.status === ProductionStatus.Idle || 
+                   data.status === ProductionStatus.Stopped || 
+                   data.status === ProductionStatus.Completed) {
+          // Reset stages when not running
+          setProductionStages(prevStages => 
+            prevStages.map(stage => ({
+              ...stage,
+              status: 'idle',
+              progress: 0,
+              timeRemaining: undefined
+            }))
+          );
+        } else if (data.status === ProductionStatus.Error) {
+          // Set a random stage to error
+          setProductionStages(prevStages => {
+            const newStages = [...prevStages];
+            const randomIndex = Math.floor(Math.random() * newStages.length);
+            newStages[randomIndex].status = 'error';
+            return newStages;
+          });
+        }
       });
 
       connection.on('ReceiveStatusChange', (oldStatus: string, newStatus: string) => {
         console.log(`Production status changed from ${oldStatus} to ${newStatus}`);
+      });
+      
+      connection.on('ReceiveAnomalyAlert', (anomaly: any, data: any) => {
+        console.log('Anomaly alert received:', anomaly, data);
+        // You could show a notification here
+        setError(`Anomaly detected: ${anomaly.probableCause}`);
+      });
+      
+      connection.on('ReceiveErrorAlert', (errorMsg: string) => {
+        console.log('Error alert received:', errorMsg);
+        setError(errorMsg);
+      });
+      
+      connection.on('ConnectionEstablished', (data: any) => {
+        console.log('Connection established:', data);
+        setSignalRConnected(true);
       });
 
       return connection;
@@ -53,11 +164,12 @@ const Dashboard: React.FC = () => {
       setError('Failed to connect to real-time updates. Refresh the page to try again.');
       return null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true);
         const data = await getProductionStatus();
         setProductionLine(data);
         setLoading(false);
@@ -72,14 +184,27 @@ const Dashboard: React.FC = () => {
     // Set up SignalR
     const connection = setupSignalRConnection();
     
+    // Ping the server every 30 seconds to keep the connection alive
+    const pingInterval = setInterval(() => {
+      if (connection && connection.state === signalR.HubConnectionState.Connected) {
+        connection.invoke('Ping').catch(err => {
+          console.error('Error pinging server:', err);
+        });
+      }
+    }, 30000);
+    
     // Cleanup function
     return () => {
       if (connection) {
         connection.off('ReceiveProductionUpdate');
         connection.off('ReceiveStatusChange');
+        connection.off('ReceiveAnomalyAlert');
+        connection.off('ReceiveErrorAlert');
+        connection.off('ConnectionEstablished');
       }
+      clearInterval(pingInterval);
     };
-  }, []);
+  }, [setupSignalRConnection]);
   
   // Function to handle reconnection
   const handleReconnect = async () => {
@@ -297,6 +422,112 @@ const Dashboard: React.FC = () => {
           emergencyBtn.disabled = false;
         }
       }, 1000);
+    }
+  };
+
+  useEffect(() => {
+    // Only update production stages based on the production line status
+    if (productionLine) {
+      if (productionLine.status === ProductionStatus.Running) {
+        // If production is running, leave the stages as they are
+        // and let the simulation handle the animation in the other useEffect
+      } else if (productionLine.status === ProductionStatus.Idle || 
+                productionLine.status === ProductionStatus.Stopped) {
+        // Reset stages when not running
+        setProductionStages(prevStages => 
+          prevStages.map(stage => ({
+            ...stage,
+            status: 'idle',
+            progress: 0
+          }))
+        );
+      }
+    }
+  }, [productionLine?.status]);
+
+  useEffect(() => {
+    // Only run simulation when production line is running and SignalR is connected
+    if (!productionLine || productionLine.status !== ProductionStatus.Running) {
+      return;
+    }
+
+    console.log('Starting production simulation');
+    
+    // Simulate automotive production line progress
+    const simulationInterval = setInterval(() => {
+      setProductionStages(prevStages => {
+        // Create a new copy of stages to modify
+        const newStages = [...prevStages];
+        
+        // Find the first active stage or stage to activate
+        let activeStageIndex = newStages.findIndex(s => s.status === 'active');
+        
+        // If no active stage, activate the first non-completed stage
+        if (activeStageIndex === -1) {
+          activeStageIndex = newStages.findIndex(s => s.status !== 'completed');
+          if (activeStageIndex !== -1) {
+            newStages[activeStageIndex].status = 'active';
+          }
+        }
+        
+        // If there's an active stage, advance its progress
+        if (activeStageIndex !== -1) {
+          const activeStage = newStages[activeStageIndex];
+          
+          // Advance progress by a random amount (1-5%)
+          const progressIncrement = Math.floor(Math.random() * 5) + 1;
+          let newProgress = activeStage.progress + progressIncrement;
+          
+          // Handle completion of a stage
+          if (newProgress >= 100) {
+            newProgress = 100;
+            activeStage.status = 'completed';
+            
+            // Activate next stage if available
+            if (activeStageIndex < newStages.length - 1) {
+              newStages[activeStageIndex + 1].status = 'active';
+            }
+            
+            // Simulate occasional errors (5% chance)
+            if (Math.random() < 0.05) {
+              // Mark a random future stage as having an error
+              const futureStages = newStages.filter((s, idx) => 
+                idx > activeStageIndex && s.status === 'idle'
+              );
+              if (futureStages.length > 0) {
+                const randomErrorStage = futureStages[Math.floor(Math.random() * futureStages.length)];
+                const errorStageIndex = newStages.findIndex(s => s.id === randomErrorStage.id);
+                if (errorStageIndex !== -1) {
+                  newStages[errorStageIndex].status = 'error';
+                }
+              }
+            }
+          }
+          
+          // Update the progress
+          activeStage.progress = newProgress;
+          
+          // Calculate time remaining (random between 5-20 seconds)
+          const timeRemaining = Math.floor(((100 - newProgress) / 100) * (Math.random() * 15 + 5));
+          activeStage.timeRemaining = timeRemaining;
+        }
+        
+        return newStages;
+      });
+    }, 1000); // Update every second
+    
+    return () => {
+      console.log('Stopping production simulation');
+      clearInterval(simulationInterval);
+    };
+  }, [productionLine?.status]);
+
+  const getStageStatusClass = (status: string): string => {
+    switch (status) {
+      case 'active': return 'bg-primary';
+      case 'completed': return 'bg-success';
+      case 'error': return 'bg-danger';
+      default: return 'bg-secondary';
     }
   };
 
@@ -604,6 +835,175 @@ const Dashboard: React.FC = () => {
             <p>
               <strong>Timestamp:</strong> {productionLine.currentSensorData.timestamp}
             </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="row mb-3">
+        <div className="col-md-12">
+          <div className="panel">
+            <h4>
+              <i className="bi bi-bar-chart"></i> Production Line Visualization
+            </h4>
+            
+            {/* Production Line Flow Visualization */}
+            <div className="production-flow-container mt-3 mb-4">
+              <div className="d-flex justify-content-between align-items-center production-flow">
+                {productionStages.map((stage, idx) => (
+                  <React.Fragment key={stage.id}>
+                    <div className={`production-station ${stage.status}`}>
+                      <div className="station-icon">
+                        {stage.id === 'stamping' && <i className="bi bi-hammer"></i>}
+                        {stage.id === 'welding' && <i className="bi bi-lightning"></i>}
+                        {stage.id === 'painting' && <i className="bi bi-palette"></i>}
+                        {stage.id === 'assembly' && <i className="bi bi-tools"></i>}
+                        {stage.id === 'testing' && <i className="bi bi-check-circle"></i>}
+                      </div>
+                      <div className="station-name">{stage.name}</div>
+                      <div className="progress" style={{ height: '10px' }}>
+                        <div 
+                          className={`progress-bar ${getStageStatusClass(stage.status)}`} 
+                          role="progressbar" 
+                          style={{ width: `${stage.progress}%` }}
+                          aria-valuenow={stage.progress} 
+                          aria-valuemin={0} 
+                          aria-valuemax={100}
+                        ></div>
+                      </div>
+                      <div className="status-badge">
+                        {stage.status === 'active' && (
+                          <span className="badge bg-primary">
+                            <i className="bi bi-arrow-repeat spin"></i> Working
+                          </span>
+                        )}
+                        {stage.status === 'completed' && (
+                          <span className="badge bg-success">
+                            <i className="bi bi-check-lg"></i> Complete
+                          </span>
+                        )}
+                        {stage.status === 'error' && (
+                          <span className="badge bg-danger">
+                            <i className="bi bi-exclamation-triangle"></i> Error
+                          </span>
+                        )}
+                        {stage.status === 'idle' && (
+                          <span className="badge bg-secondary">
+                            <i className="bi bi-hourglass"></i> Waiting
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Arrows between stations (except after the last one) */}
+                    {idx < productionStages.length - 1 && (
+                      <div className="flow-arrow">
+                        <i className="bi bi-arrow-right"></i>
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+            
+            {/* Automotive Parts Counter */}
+            <div className="row mb-3">
+              <div className="col-md-3">
+                <div className="card bg-light">
+                  <div className="card-body">
+                    <h5 className="card-title">
+                      <i className="bi bi-car-front"></i> In Production
+                    </h5>
+                    <p className="card-text display-4">
+                      {productionStages.some(s => s.status === 'active') ? '1' : '0'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card bg-light">
+                  <div className="card-body">
+                    <h5 className="card-title">
+                      <i className="bi bi-check-circle"></i> Completed
+                    </h5>
+                    <p className="card-text display-4">
+                      {productionLine?.cycleCount || 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card bg-light">
+                  <div className="card-body">
+                    <h5 className="card-title">
+                      <i className="bi bi-exclamation-triangle"></i> Defects
+                    </h5>
+                    <p className="card-text display-4">
+                      {productionLine?.vision?.fail || 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card bg-light">
+                  <div className="card-body">
+                    <h5 className="card-title">
+                      <i className="bi bi-stopwatch"></i> Cycle Time
+                    </h5>
+                    <p className="card-text display-4">
+                      {productionLine?.cycleTime?.toFixed(1) || 0}s
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Detailed Station Information */}
+            <div className="row">
+              {productionStages.map((stage, idx) => (
+                <div key={idx} className="col-md-4 mb-3">
+                  <div className={`card ${stage.status === 'idle' ? '' : `border-${getStageStatusClass(stage.status).replace('bg-', '')}`}`}>
+                    <div className={`card-header ${stage.status === 'idle' ? '' : getStageStatusClass(stage.status)}`}>
+                      <h5 className="mb-0">
+                        {stage.id === 'stamping' && <i className="bi bi-hammer me-2"></i>}
+                        {stage.id === 'welding' && <i className="bi bi-lightning me-2"></i>}
+                        {stage.id === 'painting' && <i className="bi bi-palette me-2"></i>}
+                        {stage.id === 'assembly' && <i className="bi bi-tools me-2"></i>}
+                        {stage.id === 'testing' && <i className="bi bi-check-circle me-2"></i>}
+                        {stage.name}
+                      </h5>
+                    </div>
+                    <div className="card-body">
+                      <p className="card-text">{stage.description}</p>
+                      <div className="progress mb-3" style={{ height: '20px' }}>
+                        <div 
+                          className={`progress-bar ${getStageStatusClass(stage.status)}`} 
+                          role="progressbar" 
+                          style={{ width: `${stage.progress}%` }}
+                          aria-valuenow={stage.progress} 
+                          aria-valuemin={0} 
+                          aria-valuemax={100}
+                        >
+                          {stage.progress}%
+                        </div>
+                      </div>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <span>
+                          <strong>Status:</strong>{' '}
+                          <span className={`badge ${getStageStatusClass(stage.status)}`}>
+                            {stage.status.toUpperCase()}
+                          </span>
+                        </span>
+                        {stage.timeRemaining && stage.status === 'active' && (
+                          <span>
+                            <i className="bi bi-clock"></i> {stage.timeRemaining.toFixed(0)}s remaining
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
