@@ -16,14 +16,9 @@ This system provides a comprehensive solution for manufacturing environments, co
 
 ## Demo Video
 
-Check out our demo video to see the system in action:
+Check out the demo video to see the system in action:
 
-https://github.com/jessherna/production-line-control/raw/main/assets/demo_video.mp4
-
-<video width="640" height="360" controls>
-  <source src="assets/demo_video.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+![Demo](assets/demo.gif)
 
 ## Components
 
