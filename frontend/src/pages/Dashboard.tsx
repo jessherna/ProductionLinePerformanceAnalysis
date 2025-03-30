@@ -103,18 +103,83 @@ const Dashboard: React.FC = () => {
         console.log('Production update received via SignalR:', data);
         setProductionLine(data);
         
-        // Update production stages based on the status
+        // Update production stages based on the status and production stats
         if (data.status === ProductionStatus.Running) {
-          // If we're running but all stages are idle, activate the first one
-          setProductionStages(prevStages => {
-            // If no active stages and production is running, activate the first stage
-            if (!prevStages.some(s => s.status === 'active' || s.status === 'completed')) {
-              const newStages = [...prevStages];
-              newStages[0].status = 'active';
-              return newStages;
-            }
-            return prevStages;
-          });
+          const totalParts = data.partsProduced + data.partsRejected;
+          
+          // If we have produced parts and production is running, update the stages to reflect this
+          if (totalParts > 0) {
+            setProductionStages(prevStages => {
+              // Calculate how many parts should be in each stage (simulate a pipeline)
+              const stages = [...prevStages];
+              
+              // Set stages based on how many parts have been produced
+              // All stages active when production is high
+              if (totalParts > 20) {
+                // Distribute progress across all stages when we have a lot of parts
+                const stageCount = stages.length;
+                
+                // Update each stage based on parts produced
+                for (let i = 0; i < stageCount; i++) {
+                  // Set all stages active with varying progress
+                  stages[i].status = 'active';
+                  
+                  // Calculate progress - earlier stages have higher progress
+                  // Later stages have less progress to simulate a pipeline effect
+                  const stagePosition = (stageCount - i) / stageCount; // 1.0 to 0.2 as i increases
+                  const baseProgress = Math.min(100, totalParts * 2); // Base progress from part count
+                  stages[i].progress = Math.min(100, baseProgress * stagePosition);
+                  
+                  // If a stage is at 100%, mark it as completed
+                  if (stages[i].progress >= 95) {
+                    stages[i].status = 'completed';
+                  }
+                }
+                
+                // If we have rejections, show a random stage in error state
+                if (data.partsRejected > 0 && data.partsRejected % 5 === 0) {
+                  const errorStageIndex = Math.floor(Math.random() * (stages.length - 1)) + 1; // Skip first stage
+                  stages[errorStageIndex].status = 'error';
+                }
+              } else {
+                // In early production, activate stages progressively
+                const activeStagesToShow = Math.max(1, Math.min(stages.length, Math.ceil(totalParts / 4)));
+                
+                for (let i = 0; i < stages.length; i++) {
+                  if (i < activeStagesToShow) {
+                    // Active stages
+                    stages[i].status = 'active';
+                    const progress = i === activeStagesToShow - 1 
+                      ? (totalParts % 4) * 25 // Last active stage has partial progress
+                      : 100; // Earlier stages are at 100%
+                    stages[i].progress = progress;
+                    
+                    // Mark completed stages
+                    if (progress >= 100) {
+                      stages[i].status = 'completed';
+                    }
+                  } else {
+                    // Inactive stages
+                    stages[i].status = 'idle';
+                    stages[i].progress = 0;
+                  }
+                }
+              }
+              
+              return stages;
+            });
+          } else {
+            // If no parts yet but running, activate the first stage
+            setProductionStages(prevStages => {
+              // If no active stages and production is running, activate the first stage
+              if (!prevStages.some(s => s.status === 'active' || s.status === 'completed')) {
+                const newStages = [...prevStages];
+                newStages[0].status = 'active';
+                return newStages;
+              }
+              return prevStages;
+            });
+          }
         } else if (data.status === ProductionStatus.Idle || 
                    data.status === ProductionStatus.Stopped || 
                    data.status === ProductionStatus.Completed) {
@@ -453,9 +518,29 @@ const Dashboard: React.FC = () => {
 
     console.log('Starting production simulation');
     
-    // Simulate automotive production line progress
+    // Simulation interval for small animations and progress changes
+    // This adds visual feedback independent of the actual data updates
     const simulationInterval = setInterval(() => {
       setProductionStages(prevStages => {
+        // Get total parts from production line
+        const totalParts = productionLine.partsProduced + productionLine.partsRejected;
+        
+        // If we have a significant number of parts, don't rely on animation
+        // instead, let the production data drive the visualization
+        if (totalParts > 5) {
+          // Only make minor visual tweaks for active stages
+          return prevStages.map(stage => {
+            if (stage.status === 'active') {
+              // Small random fluctuations in progress for visual interest
+              const fluctuation = Math.random() * 4 - 2; // -2 to +2
+              const newProgress = Math.max(0, Math.min(99, stage.progress + fluctuation));
+              return { ...stage, progress: newProgress };
+            }
+            return stage;
+          });
+        }
+        
+        // Early production or when parts count is low, use regular simulation
         // Create a new copy of stages to modify
         const newStages = [...prevStages];
         
@@ -487,21 +572,6 @@ const Dashboard: React.FC = () => {
             if (activeStageIndex < newStages.length - 1) {
               newStages[activeStageIndex + 1].status = 'active';
             }
-            
-            // Simulate occasional errors (5% chance)
-            if (Math.random() < 0.05) {
-              // Mark a random future stage as having an error
-              const futureStages = newStages.filter((s, idx) => 
-                idx > activeStageIndex && s.status === 'idle'
-              );
-              if (futureStages.length > 0) {
-                const randomErrorStage = futureStages[Math.floor(Math.random() * futureStages.length)];
-                const errorStageIndex = newStages.findIndex(s => s.id === randomErrorStage.id);
-                if (errorStageIndex !== -1) {
-                  newStages[errorStageIndex].status = 'error';
-                }
-              }
-            }
           }
           
           // Update the progress
@@ -520,7 +590,7 @@ const Dashboard: React.FC = () => {
       console.log('Stopping production simulation');
       clearInterval(simulationInterval);
     };
-  }, [productionLine?.status]);
+  }, [productionLine?.status, productionLine?.partsProduced, productionLine?.partsRejected]);
 
   const getStageStatusClass = (status: string): string => {
     switch (status) {
@@ -914,7 +984,7 @@ const Dashboard: React.FC = () => {
                       <i className="bi bi-car-front"></i> In Production
                     </h5>
                     <p className="card-text display-4">
-                      {productionStages.some(s => s.status === 'active') ? '1' : '0'}
+                      {productionStages.filter(s => s.status === 'active').length}
                     </p>
                   </div>
                 </div>
@@ -926,7 +996,7 @@ const Dashboard: React.FC = () => {
                       <i className="bi bi-check-circle"></i> Completed
                     </h5>
                     <p className="card-text display-4">
-                      {productionLine?.cycleCount || 0}
+                      {productionLine?.partsProduced || 0}
                     </p>
                   </div>
                 </div>
@@ -938,7 +1008,7 @@ const Dashboard: React.FC = () => {
                       <i className="bi bi-exclamation-triangle"></i> Defects
                     </h5>
                     <p className="card-text display-4">
-                      {productionLine?.vision?.fail || 0}
+                      {productionLine?.partsRejected || 0}
                     </p>
                   </div>
                 </div>
