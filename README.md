@@ -14,6 +14,17 @@ This system provides a comprehensive solution for manufacturing environments, co
 - Anomaly detection to identify potential issues
 - Performance visualization and reporting
 
+## Demo Video
+
+Check out our demo video to see the system in action:
+
+https://github.com/jessherna/production-line-control/raw/main/assets/demo_video.mp4
+
+<video width="640" height="360" controls>
+  <source src="assets/demo_video.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 ## Components
 
 ### 1. Production Line Control System
