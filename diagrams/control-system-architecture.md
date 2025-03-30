@@ -1,3 +1,4 @@
+```mermaid
 graph TD;
     A["Manufacturing Hardware"]-->B["PLC/Robot Controllers"]
     B-->C["C# Control System"]
@@ -26,3 +27,4 @@ graph TD;
     style C fill:#0275d8,stroke:#333,stroke-width:2px
     style F fill:#0275d8,stroke:#333,stroke-width:2px
     style G fill:#0275d8,stroke:#333,stroke-width:2px
+```

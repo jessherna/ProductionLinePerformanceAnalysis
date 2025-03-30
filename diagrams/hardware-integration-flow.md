@@ -1,3 +1,4 @@
+```mermaid
 sequenceDiagram
     participant CS as C# Control System
     participant PLC as PLC Controller
@@ -38,3 +39,4 @@ sequenceDiagram
         CS->>PLC: Update Production Count
         CS->>Robot: Return to Home Position
     end
+```

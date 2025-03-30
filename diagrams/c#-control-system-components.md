@@ -1,3 +1,4 @@
+```mermaid
 classDiagram
     class ControlSystemManager {
         #43;InitializeSystem()
@@ -87,3 +88,4 @@ classDiagram
     ControlSystemManager o-- PythonAnalyticsIntegration : uses
     ControlSystemManager o-- MESIntegration : uses
     ControlSystemManager o-- HMIController : uses
+```

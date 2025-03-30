@@ -1,3 +1,4 @@
+```mermaid
 graph LR;
     A["C# Data Acquisition"]-->B["Data Storage"]
     B-->C["Python Analysis Engine"]
@@ -22,3 +23,4 @@ graph LR;
     style E fill:#d3f8e2
     style F fill:#d3f8e2
     style G fill:#d3f8e2
+```
