@@ -18,7 +18,7 @@ This system provides a comprehensive solution for manufacturing environments, co
 
 Check out the demo video to see the system in action:
 
-![Demo](assets/demo.gif)
+[![Watch the video](assets/demo.gif)](assets/demo.mp4)
 
 ## Components
 
